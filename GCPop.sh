@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# =================== Colors ===================
+# =================== Colors & UI ===================
 RED='\033[1;31m'
 GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
@@ -10,39 +10,44 @@ CYAN='\033[1;36m'
 RESET='\033[0m'
 BOLD='\033[1m'
 
+# Clear screen and show Banner
 clear
-printf "\n${RED}${BOLD}🚀 ALPHA${YELLOW}0x1 ${BLUE}HYBRID BEAST${RESET}\n"
-echo "----------------------------------------"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "${RED}${BOLD}    🚀 ALPHA${YELLOW}0x1 ${BLUE}HYBRID BEAST ${PURPLE}[LAB EDITION]${RESET}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 
-# =================== 1. Setup ===================
-if [[ -f .env ]]; then
-    source ./.env
-fi
+# =================== 1. Setup & Auth ===================
+if [[ -f .env ]]; then source ./.env; fi
 
 if [[ -z "${TELEGRAM_TOKEN:-}" ]]; then
-    printf " ${CYAN}💎 Bot Token:${RESET} "
+    echo -ne " ${YELLOW}➤${RESET} ${BOLD}Enter Bot Token:${RESET} "
     read -r TELEGRAM_TOKEN
 fi
 
 if [[ -z "${TELEGRAM_CHAT_IDS:-}" ]]; then
-    printf " ${CYAN}💎 Chat ID:${RESET} "
+    echo -ne " ${YELLOW}➤${RESET} ${BOLD}Enter Chat ID:${RESET} "
     read -r TELEGRAM_CHAT_IDS
 fi
 
 # =================== 2. Config ===================
+# Lab အတွင်းရှိနေတဲ့ Region ကို Auto ရှာဖွေခြင်း
+DETECTED_REGION=$(gcloud container clusters list --format="value(location)" | head -n 1 | sed 's/-[a-z]$//')
+REGION="${DETECTED_REGION:-us-central1}"
 SERVER_NAME="Alpha0x1-$(date +%s | tail -c 4)"
 GEN_UUID=$(cat /proc/sys/kernel/random/uuid)
 SERVICE_NAME="alpha0x1"
-# သင်ပို့ပေးတဲ့ Lab Instruction အရ europe-west4 သို့ ပြောင်းလဲထားပါသည်
-REGION="europe-west4"
 IMAGE="a0x1/al0x1"
 
-# =================== 3. Deploying ===================
-echo ""
-echo -e "${YELLOW}➤ Injecting High-Performance Engine...${RESET}"
+echo -e "\n${BLUE}┌──────────────── CONFIGURATION ────────────────┐${RESET}"
+echo -e "${BLUE}│${RESET}  ${BOLD}Region  :${RESET} ${GREEN}${REGION}${RESET}"
+echo -e "${BLUE}│${RESET}  ${BOLD}Service :${RESET} ${GREEN}${SERVICE_NAME}${RESET}"
+echo -e "${BLUE}│${RESET}  ${BOLD}UUID    :${RESET} ${CYAN}${GEN_UUID}${RESET}"
+echo -e "${BLUE}└────────────────────────────────────────────────┘${RESET}\n"
 
-# Step A: Deploy Private (High Specs)
-# 🔥 4 vCPU, 4GB RAM, Gen2 စနစ်ဖြင့် Deploy လုပ်ခြင်း
+# =================== 3. Deploying ===================
+echo -e "${YELLOW}🔄 Deploying to Cloud Run (High-Perf Mode)...${RESET}"
+
+# Step A: Deployment
 gcloud run deploy "$SERVICE_NAME" \
   --image="$IMAGE" \
   --platform=managed \
@@ -62,16 +67,9 @@ gcloud run deploy "$SERVICE_NAME" \
   --max-instances=2 \
   --quiet
 
-# Step B: Force Public Access (The Bypass)
-echo -e "${YELLOW}➤ Unlocking Public Access...${RESET}"
-gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
-  --region="$REGION" \
-  --member="allUsers" \
-  --role="roles/run.invoker" \
-  --quiet >/dev/null 2>&1
-
-# Step C: Traffic Optimization
-echo -e "${YELLOW}➤ Finalizing Routing...${RESET}"
+# Step B: Public Access & Traffic
+echo -e "${YELLOW}🔓 Unlocking Public Access & Optimizing Route...${RESET}"
+gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region="$REGION" --member="allUsers" --role="roles/run.invoker" --quiet >/dev/null 2>&1
 gcloud run services update-traffic "$SERVICE_NAME" --to-latest --region="$REGION" --quiet >/dev/null 2>&1
 
 # Get URL
@@ -79,16 +77,17 @@ URL=$(gcloud run services describe "$SERVICE_NAME" --platform managed --region "
 DOMAIN=${URL#https://}
 
 # =================== 4. Notification ===================
-echo -e "${YELLOW}➤ Sending Keys...${RESET}"
+echo -e "${YELLOW}📤 Sending Keys to Telegram...${RESET}"
 
 URI="vless://${GEN_UUID}@vpn.googleapis.com:443?mode=gun&security=tls&encryption=none&type=grpc&serviceName=Tg-@Alpha0x1&sni=${DOMAIN}#${SERVER_NAME}"
 
 export TZ="Asia/Yangon"
 START_LOCAL="$(date +'%d.%m.%Y %I:%M %p')"
-END_LOCAL="$(date -d '+5 hours 10 minutes' +'%d.%m.%Y %I:%M %p')"
+# 6 နာရီ ပြောင်းလဲသတ်မှတ်ခြင်း
+END_LOCAL="$(date -d '+6 hours' +'%d.%m.%Y %I:%M %p')"
 
 MSG="<blockquote>🚀 ${SERVER_NAME} V2RAY SERVICE</blockquote>
-<blockquote>⏰ 5-Hour Free Service</blockquote>
+<blockquote>⏰ 6-Hour Free Service</blockquote>
 <blockquote>📡Mytel 4G လိုင်းဖြတ် ဘယ်နေရာမဆိုသုံးလို့ရပါတယ်</blockquote>
 <pre><code>${URI}</code></pre>
 <blockquote>✅ စတင်ချိန်: <code>${START_LOCAL}</code></blockquote>
@@ -101,11 +100,12 @@ if [[ -n "$TELEGRAM_TOKEN" && -n "$TELEGRAM_CHAT_IDS" ]]; then
             -d "chat_id=${chat_id}" \
             -d "parse_mode=HTML" \
             --data-urlencode "text=${MSG}" > /dev/null
-        echo -e "${GREEN}✔ Sent to ID: ${chat_id}${RESET}"
     done
+    echo -e "${GREEN}✅ Telegram Notifications Sent Successfully!${RESET}"
 else
-    echo "No Token found."
+    echo -e "${RED}❌ Telegram config missing. Skip notification.${RESET}"
 fi
 
-echo ""
-echo -e "${GREEN}✅ DEPLOYMENT SUCCESSFUL!${RESET}"
+echo -e "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "${GREEN}${BOLD}             🎉 DEPLOYMENT FINISHED!${RESET}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
